@@ -6,7 +6,7 @@ This is a library for openwrt supported routers to push router specific informat
 
 2- Start sigfox-kunia software
 
-3- sigfox-kunia sends data to connected Sigfox USB at a predefined library
+3- sigfox-kunia sends data to connected Sigfox USB at a predefined interval
 
 4- Create UCI config for sigfox-kunia
 
