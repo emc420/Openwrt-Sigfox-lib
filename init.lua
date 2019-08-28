@@ -18,6 +18,10 @@ if pid == 0 then
 					if text:match("Driver=cp210x") then	
 						cntrr = cntrr+1
 					end
+					if text:match("Driver=cdc_acm") then	
+						cntrr = cntrr+1
+					end
+					
 			end 
 			if (cntrr==0) then 
 				flag = false
