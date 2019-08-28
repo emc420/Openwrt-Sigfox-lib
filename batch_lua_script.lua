@@ -19,7 +19,44 @@ local err1 =""
 local err2 =""
 local err3 =""
 local dwnlink ="0" 
+local ipChange = ""
+local battStat = "0"
+local comm
+local dns
+local fillBits = "0000000000000000000000000000000000000000000001"
 tab = {}
+
+function fetchUSBPort()
+		local fetchPort = io.popen("ls -l /dev/ttyACM*")
+		local acm = fetchPort:read()
+
+		if(acm==nil) then 
+			
+			fetchPort = io.popen("ls -l /dev/ttyUSB*")
+			local usb = fetchPort:read()
+
+			if(usb==nil) then 
+			
+				return "None"
+
+			else
+
+				local index = string.find(usb, "/dev/")
+				local subs = string.sub(usb, index, string.len(usb))
+				return subs
+
+			end
+			
+		else
+
+			local index = string.find(acm, "/dev/")
+			local subs = string.sub(acm, index, string.len(acm))
+			return subs
+
+		end
+
+
+end
 
 function getinfo(ifname, func)
 	local driver_type = iwinfo.type(ifname)
@@ -75,7 +112,57 @@ function getTime(seconds)
 	end
 	return (header..temp)
 end
+---------------------------------------------
+function checkIp(ipv4, dnsp, mask)
 
+local arr1={}
+local arr2={}
+local arr3={}
+local flag = true
+
+	for w in ipv4:gmatch("([^.]+).?") do 
+		table.insert(arr1, w) 
+	end
+
+	for w in dnsp:gmatch("([^.]+).?") do 
+		table.insert(arr2, w)
+	end
+	
+	for w in mask:gmatch("([^.]+).?") do 
+		table.insert(arr3, w) 
+	end
+	
+	if(arr1[1] ~= arr2[1]) then 
+		flag = false
+	end
+	if(arr3[2] == "255") then
+		if(arr1[2]~=arr2[2]) then
+			flag = false
+		end
+	else
+		local diff = 255-tonumber(arr3[2])
+		if(tonumber(arr2[2])-tonumber(arr1[2])>diff) then 
+			flag = false
+		end
+	end
+	if(arr3[3] == "255") then
+		if(arr1[3]~=arr2[3]) then
+			flag = false
+		end
+	else
+		local diff = 255-tonumber(arr3[3])
+		if(tonumber(arr2[3])-tonumber(arr1[3])>diff) then 
+			flag = false
+		end
+	end
+	
+	return flag
+
+end
+
+
+
+--------------------------------------------
 local clock = os.clock
 function sleep(n)  -- seconds
   local t0 = clock()
@@ -93,20 +180,13 @@ local socket = require("socket")
 ----------------------------------
 local control = false
 local cntr = 0
-while true do
-		local test = socket.tcp()
-		test:settimeout(2000)
-		local testResult = test:connect("openwrt.org", 80)
 
-		if testResult == nil then
-			if control == false then
-				cntr = cntr + 1
-				--- Internet status 
-					--print("IA: 0")
-					IA = "0"
-				------------------------------
+
+
+function fetchParams()
+	------------------------------
 				--Packet Header--
-				packetHdr = "00"
+				packetHdr = "100"
 				----------------------------------------------- 
 				--- Router Uptime
 				local status_1 = conn:call("system", "info",{})
@@ -147,7 +227,10 @@ while true do
 						deviceNo =  deviceNo..tostring(v)
 				end
 				-------------------------------------------------
-				-- Check status for network interface WAN
+				-- Check status for network interface WAN and check IP subnet 
+				local ipadd =""
+				local dns1=""
+				local mask=""
 				local status_wan = conn:call("network.interface.wan", "status", {})
 				---print("WAN: ")
 				for k, v in pairs(status_wan) do
@@ -159,6 +242,13 @@ while true do
 						--print("W" .. k ..": " .. flag)
 						Wup =  flag
 					end
+					if tostring(k)=="ipv4-address" then
+						ipadd = v[1]["address"]
+					end
+					if tostring(k)=="dns-server" then
+						dns1 = v[1]
+					end
+					
 					---if tostring(k)=="uptime" then
 					--	print("				" .. k ..": " .. tostring(v))
 					--end
@@ -169,7 +259,24 @@ while true do
 					--	print("				" .. k ..": " .. tostring(v))
 					--end
 				end
-				
+				local ipChan = io.popen("ifconfig")
+					while true do
+						local line = ipChan:read("*l")
+						if not line then break end
+						if line:match("inet addr:"..ipadd) then
+							local index = string.find(line, " Mask:")
+							local subs = string.sub(line, index+6, string.len(line))
+													
+							mask= subs
+						end
+					end
+				if(ipadd == "" or dns1 == "" or mask == "" ) then 
+					ipChange = 0
+				elseif(checkIp(ipadd, dns1, mask) == false) then
+					ipChange = 1
+				else
+					ipChange = 0
+				end
 				-- Check status for network interface: LAN
 				local status_lan = conn:call("network.interface.lan", "status", {})
 				---print("LAN: ")
@@ -232,8 +339,8 @@ while true do
 				end
 				------------------------------------------------
 				---Check GateWay Comm and DNS
-				local comm = "0"
-				local dns = "0"
+				comm = "0"
+				dns = "1"
 				local ipv4 = "nil"
 				local gatewayAdd = "nil"
 				
@@ -290,8 +397,10 @@ while true do
 							end
 					end	
 					
-					if(flag1 == "1" and flag2 == "0") then 
-						dns = "1"
+					if flag1 == "1" then
+						if flag2 == "0" then 
+							dns = "0"
+						end
 					end
 					
 						
@@ -407,19 +516,47 @@ while true do
 					err1 = "0000000"
 				end
 				if(err2 == "") then 
-					err1 = "0000000"
+					err2 = "0000000"
 				end
 				if(err3 == "") then 
 					err3 = "0000000"
 				end
 				------------------------------------------------
-				io.open("/dev/ttyUSB0","w")
-				io.popen("stty -F /dev/ttyUSB0 9600")
-				io.output("/dev/ttyUSB0")
-				io.write(packetHdr..IA..radio0..radio1..deviceNo..Wup..LuP..WConn..LConn..comm..dns..SysUp..err1..err2..err3..dwnlink)
+
+
+
+end
+
+local port = fetchUSBPort()
+IA = "1"
+fetchParams()
+io.popen("stty -F "..port.." 115200")
+io.open(port,"w")
+io.output(port)
+io.write(packetHdr..IA..radio0..radio1..deviceNo..Wup..LuP..WConn..LConn..comm..dns..SysUp..ipChange..err1..err2..err3..dwnlink..battStat..fillBits.."\r\n")
+
+while true do
+		local test = socket.tcp()
+		test:settimeout(2000)
+		local testResult = test:connect("openwrt.org", 80)
+
+		if testResult == nil then
+			if control == false then
+				cntr = cntr + 1
+				--- Internet status 
+					--print("IA: 0")
+					IA = "0"
+				fetchParams()
+				
+				io.popen("stty -F "..port.." 115200")
+				io.open(port,"w")
+	
+				io.output(port)
+				io.write(packetHdr..IA..radio0..radio1..deviceNo..Wup..LuP..WConn..LConn..comm..dns..SysUp..ipChange..err1..err2..err3..dwnlink..battStat..fillBits.."\r\n")
 				
 				local f = io.open("/root/test/log.txt", "a")
-				f:write(packetHdr..IA..radio0..radio1..deviceNo..Wup..LuP..WConn..LConn..comm..dns..SysUp..err1..err2..err3..dwnlink.."\n")
+				f:write(packetHdr..IA..radio0..radio1..deviceNo..Wup..LuP..WConn..LConn..comm..dns..SysUp..ipChange..err1..err2..err3..dwnlink..battStat..fillBits.."\n")
+				f:write("pktHdr"..packetHdr.."Int Accs"..IA.."radio0"..radio0.."rad1"..radio1.."devNo"..deviceNo.."Wup"..Wup.."Lup"..LuP.."Wconn"..WConn.."LConn"..LConn.."comm"..comm.."dns"..dns.."Sysup"..SysUp.."Ipchange"..ipChange.."Err1"..err1.."err2"..err2.."err3"..err3.."DL"..dwnlink..battStat..fillBits.."\n")
 				f:close()
 				---print(packetHdr..IA..radio0..radio1..deviceNo..Wup..LuP..WConn..LConn..comm..dns..SysUp..err1..err2..err3..dwnlink)
 				if cntr==2 then
@@ -438,9 +575,9 @@ while true do
 			--print(var)
 		end
 
+dofile("/root/test/geoLoc.lua")
 test = nil
 sleep(5)
-dofile("/root/test/geoLoc.lua")
 local file = io.open("/tmp/test.log", "r")
 if file ~= nil then
 	local devStat = tostring(file:read())
