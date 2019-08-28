@@ -1,17 +1,42 @@
 #!/usr/bin/lua
 
 local dwnLnk = ""
+local fillBits="000000000000000000000000000000000001"
 _G.value = ""
 
-local file = io.open("test.lua", "r")
-if file==nil then
-	---print("No file")
-	local deviceId=""
-	local deviceType=""
-	local packetHdr = "11"
 
-	--- Linksys WRT1200AC -  000000001
-	function toBits(num,bits)
+function fetchUSBPort()
+		local fetchPort = io.popen("ls -l /dev/ttyACM*")
+		local acm = fetchPort:read()
+
+		if(acm==nil) then 
+			fetchPort = io.popen("ls -l /dev/ttyUSB*")
+			local usb = fetchPort:read()
+
+			if(usb==nil) then 
+			
+				return "None"
+
+			else
+
+				local index = string.find(usb, "/dev/")
+				local subs = string.sub(usb, index, string.len(usb))
+				return subs
+
+			end
+			
+		else
+
+			local index = string.find(acm, "/dev/")
+			local subs = string.sub(acm, index, string.len(acm))
+			return subs
+
+		end
+
+
+end
+
+function toBits(num,bits)
 		-- returns a table of bits, most significant first.
 		bits = bits or math.max(1, select(2, math.frexp(num)))
 		local t = {} -- will contain the bits        
@@ -20,7 +45,18 @@ if file==nil then
 			num = math.floor((num - t[b]) / 2)
 		end
 		return t
-	end
+end
+
+local USBport = fetchUSBPort()
+local file = io.open("test.lua", "r")
+if file==nil then
+	---print("No file")
+	local deviceId=""
+	local deviceType=""
+	local packetHdr = "111"
+
+	--- Linksys WRT1200AC -  000000001
+
 
 	local strMachine = io.popen("dmesg | grep Machine")
 
@@ -55,27 +91,29 @@ if file==nil then
 
 	deviceId = temp
 	local f = io.open("/root/test/log.txt", "a")
-	f:write(packetHdr..deviceId..deviceType.."\n")
+	f:write(packetHdr..deviceId..deviceType..fillBits.."\n")
 	f:close()
 	
-	io.open("/dev/ttyUSB0","w")
-	io.popen("stty -F /dev/ttyUSB0 9600")
-	io.output("/dev/ttyUSB0")
-	io.write(packetHdr..deviceId..deviceType)
+	io.popen("stty -F "..USBport.." 115200")
+	io.open(USBport,"w")
+	
+	io.output(USBport)
+	io.write(packetHdr..deviceId..deviceType..fillBits.."\r\n")
 	
 	dwnLnk = "1"
 	file = io.open("test.lua", "a")
-	file:write(packetHdr..deviceId..deviceType)
+	file:write(packetHdr..deviceId..deviceType..fillBits.."\n")
 	
 	conn:close()
 	
 else	
 	local dId = file:read()
-	io.open("/dev/ttyUSB0","w")
-	io.popen("stty -F /dev/ttyUSB0 9600")
-	io.output("/dev/ttyUSB0")
-	io.write(dId)
+	io.popen("stty -F "..USBport.." 115200")
+	io.open(USBport,"w")
 	
+	io.output(USBport)
+	print(dId.."\r\n")
+	io.write(dId.."\r\n")
 	local f = io.open("/root/test/log.txt", "a")
 	f:write(dId.."\n")
 	f:close()
