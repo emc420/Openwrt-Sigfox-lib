@@ -4,9 +4,9 @@ This is a library for openwrt supported routers to push router specific informat
 
 1- Supports LoRa, Sigfox
 
-2- Start kunia, lora-kunia software
+2- Start kunia
 
-3- kunia sends data to connected Sigfox USB at a predefined interval
+3- kunia sends data to connected Non-Cellular-LPWAN-Module USB/Mini-PCIE at a predefined interval
 
 4- Create UCI config for kunia
 
